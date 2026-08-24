@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BemolTok — Login concluído</title>
+  <style>
+    :root { color-scheme: light dark; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(160deg, #0A1018 0%, #122036 100%);
+      color: #E8EEF5;
+      padding: 24px;
+    }
+    .card {
+      max-width: 360px;
+      width: 100%;
+      text-align: center;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 24px;
+      padding: 40px 28px;
+      backdrop-filter: blur(20px);
+    }
+    .logo {
+      width: 64px; height: 64px;
+      margin: 0 auto 20px;
+      border-radius: 18px;
+      background: #4A90D9;
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 8px 24px rgba(74,144,217,0.45);
+    }
+    .logo svg { width: 36px; height: 36px; fill: #fff; }
+    h1 { font-size: 22px; font-weight: 800; margin: 0 0 8px; }
+    p { font-size: 15px; line-height: 1.5; color: #AEBED2; margin: 0 0 24px; }
+    .check {
+      width: 56px; height: 56px; margin: 0 auto 16px;
+      border-radius: 50%;
+      background: rgba(52,199,89,0.15);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .check svg { width: 30px; height: 30px; stroke: #34C759; }
+    a.btn {
+      display: inline-block;
+      background: #4A90D9; color: #fff;
+      text-decoration: none; font-weight: 600; font-size: 16px;
+      padding: 14px 28px; border-radius: 14px;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo">
+      <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+    </div>
+    <div class="check">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+    </div>
+    <h1>Login concluído</h1>
+    <p>Tudo certo! Pode voltar para o app BemolTok — você já está conectado.</p>
+    <a class="btn" href="https://bemoltok-dev.firebaseapp.com/finishSignIn">Abrir o BemolTok</a>
+  </div>
+</body>
+</html>

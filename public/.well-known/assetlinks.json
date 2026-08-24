@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.example.bemoltok",
+      "sha256_cert_fingerprints": [
+        "51:08:10:24:11:FC:27:62:50:B8:A0:3F:73:4E:48:DE:B1:B4:09:2D:5A:A7:F4:6B:78:9A:7E:5D:12:8A:31:27"
+      ]
+    }
+  }
+]

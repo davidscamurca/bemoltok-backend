@@ -1,0 +1,45 @@
+# Secrets and local environment
+*.secret
+.env
+.env.*
+secrets.json
+credentials.json
+*credentials*.json
+*service-account*.json
+*service_account*.json
+google-services.json
+GoogleService-Info.plist
+
+# Firebase local cache
+.firebase/
+
+# API generated/private artifacts
+api/artifacts/
+
+# Data science data, model artifacts, and environments
+datascience/data/
+datascience/checkpoints/
+datascience/.venv/
+datascience/venv/
+datascience/logs/
+datascience/wandb/
+datascience/*.egg-info/
+datascience/dist/
+datascience/build/
+
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Jupyter
+.ipynb_checkpoints/
+
+# IDE and OS files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+__MACOSX/
+Thumbs.db

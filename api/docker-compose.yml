@@ -1,0 +1,28 @@
+services:
+  sysrec:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./artifacts:/data/artifacts:ro
+      # Mount gcloud ADC to enable Firebase Auth + Firestore locally (optional).
+      # Without it, the server runs in degraded mode (recommend/similar only).
+      - ${HOME}/.config/gcloud:/root/.config/gcloud:ro
+    environment:
+      - PORT=8080
+      - ARTIFACTS_DIR=/data/artifacts
+      # Uncomment to enable Firebase locally (requires ADC mounted above):
+      # - GOOGLE_CLOUD_PROJECT=bemoltok-dev
+      # - ALLOWED_EMAIL_DOMAIN=bemol.com.br
+    restart: unless-stopped
+    networks:
+      - sysrec-net
+
+networks:
+  sysrec-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.100.0.0/16

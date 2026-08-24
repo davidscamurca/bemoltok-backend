@@ -1,0 +1,16 @@
+rules_version = '2';
+
+// BemolTok Firestore — lockdown.
+//
+// All client-side access (mobile/web Firebase SDK using the public API key) is
+// DENIED. Every read/write goes through the Cloud Run BFF, which uses the
+// Firebase Admin SDK and bypasses these rules. This keeps PII (users.email,
+// users.bemolClientId) and the event/stats data unreachable from the internet
+// data plane.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

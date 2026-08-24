@@ -1,0 +1,8 @@
+# Large local embeddings: served to Cloud Run via GCS volume mount, never baked
+# into the image. Excluding keeps the Cloud Build upload tiny.
+artifacts/
+
+# Not needed in the build context.
+README.md
+docker-compose.yml
+.git/
