@@ -184,6 +184,10 @@ type Server struct {
 	// nil when the UGC bucket or URL signer is unavailable, which disables /posts.
 	ugc *ugcService
 
+	// vtex proxies catalog SKU/search so AppKey/AppToken stay server-side.
+	// nil when VTEX_APP_KEY / VTEX_APP_TOKEN are unset (catalog routes → 503).
+	vtex *vtexCatalog
+
 	// uid → bemolClientId cache to avoid a Firestore read per /recommend.
 	clientIDMu    sync.RWMutex
 	clientIDCache map[string]string
@@ -1185,6 +1189,13 @@ func main() {
 		log.Printf("Magic-link sender disabled (SENDGRID_API_KEY unset)")
 	}
 
+	// VTEX catalog proxy. Optional: nil disables /catalog/* (503).
+	if srv.vtex = newVtexCatalog(); srv.vtex != nil {
+		log.Printf("VTEX catalog proxy enabled (host=%s)", srv.vtex.host)
+	} else {
+		log.Printf("VTEX catalog proxy disabled (VTEX_APP_KEY/TOKEN unset)")
+	}
+
 	// Firebase (Auth + Firestore). Optional in degraded/local mode: when it
 	// cannot be initialized the server still serves recommendations, but /me
 	// and token verification are unavailable. If AUTH_REQUIRED=true the absence
@@ -1249,6 +1260,10 @@ func main() {
 	// handles POST /posts/{id}/complete.
 	mux.HandleFunc("/posts", srv.authMiddleware(srv.handlePosts))
 	mux.HandleFunc("/posts/", srv.authMiddleware(srv.handlePostsSub))
+
+	// VTEX catalog proxy (auth-only). Keys stay on the BFF; the app uses Bearer.
+	mux.HandleFunc("/catalog/sku/", srv.authMiddleware(srv.handleCatalogSKU))
+	mux.HandleFunc("/catalog/search", srv.authMiddleware(srv.handleCatalogSearch))
 
 	log.Printf("Server listening on :%s", port)
 	log.Fatal(http.ListenAndServe(":"+port, mux))
