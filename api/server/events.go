@@ -40,6 +40,9 @@ type eventDoc struct {
 	InjectionSource string    `firestore:"injection_source,omitempty"`
 	ExperimentID    string    `firestore:"experiment_id,omitempty"`
 	Variant         string    `firestore:"variant,omitempty"`
+	SessionID       string    `firestore:"session_id,omitempty"`
+	ImpressionID    string    `firestore:"impression_id,omitempty"`
+	WeightsVersion  string    `firestore:"weights_version,omitempty"`
 	ClientVersion   string    `firestore:"client_version,omitempty"`
 	ReceivedAt      time.Time `firestore:"received_at,serverTimestamp"`
 }
@@ -73,6 +76,9 @@ func (srv *Server) writeEvent(ctx context.Context, uid string, ev EventInput, cl
 		InjectionSource: ev.InjectionSource,
 		ExperimentID:    ev.ExperimentID,
 		Variant:         ev.Variant,
+		SessionID:       ev.SessionID,
+		ImpressionID:    ev.ImpressionID,
+		WeightsVersion:  ev.WeightsVersion,
 		ClientVersion:   clientVersion,
 	})
 	if err != nil {

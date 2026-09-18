@@ -123,6 +123,9 @@ type EventInput struct {
 	InjectionSource string   `json:"injection_source,omitempty"`
 	ExperimentID    string   `json:"experiment_id,omitempty"`
 	Variant         string   `json:"variant,omitempty"`
+	SessionID       string   `json:"session_id,omitempty"`
+	ImpressionID    string   `json:"impression_id,omitempty"`
+	WeightsVersion  string   `json:"weights_version,omitempty"`
 }
 
 type EventsBatch struct {
@@ -1236,6 +1239,11 @@ func main() {
 	// Auth-only.
 	mux.HandleFunc("/me", srv.authMiddleware(srv.handleMe))
 	mux.HandleFunc("/me/client-id", srv.authMiddleware(srv.handleSetClientID))
+	mux.HandleFunc("/me/likes", srv.authMiddleware(srv.handleMeLikes))
+	mux.HandleFunc("/me/likes/", srv.authMiddleware(srv.handleMeLikes))
+	mux.HandleFunc("/me/bookmarks", srv.authMiddleware(srv.handleMeBookmarks))
+	mux.HandleFunc("/me/bookmarks/", srv.authMiddleware(srv.handleMeBookmarks))
+	mux.HandleFunc("/products/", srv.authMiddleware(srv.handleProductComments))
 
 	// UGC posts (auth-only). /posts: POST creates + GET lists own; the subpath
 	// handles POST /posts/{id}/complete.
