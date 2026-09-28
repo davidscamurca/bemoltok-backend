@@ -123,6 +123,9 @@ type EventInput struct {
 	InjectionSource string   `json:"injection_source,omitempty"`
 	ExperimentID    string   `json:"experiment_id,omitempty"`
 	Variant         string   `json:"variant,omitempty"`
+	SessionID       string   `json:"session_id,omitempty"`
+	ImpressionID    string   `json:"impression_id,omitempty"`
+	WeightsVersion  string   `json:"weights_version,omitempty"`
 }
 
 type EventsBatch struct {
@@ -180,6 +183,14 @@ type Server struct {
 	// ugc powers the /posts endpoints (user photos/video tied to a product).
 	// nil when the UGC bucket or URL signer is unavailable, which disables /posts.
 	ugc *ugcService
+
+	// vtex proxies catalog SKU/search so AppKey/AppToken stay server-side.
+	// nil when VTEX_APP_KEY / VTEX_APP_TOKEN are unset (catalog routes → 503).
+	vtex *vtexCatalog
+
+	// commentStoreOverride allows in-memory comment persistence in tests.
+	// nil means use Firestore via srv.fb.
+	commentStoreOverride commentStore
 
 	// uid → bemolClientId cache to avoid a Firestore read per /recommend.
 	clientIDMu    sync.RWMutex
@@ -1182,6 +1193,13 @@ func main() {
 		log.Printf("Magic-link sender disabled (SENDGRID_API_KEY unset)")
 	}
 
+	// VTEX catalog proxy. Optional: nil disables /catalog/* (503).
+	if srv.vtex = newVtexCatalog(); srv.vtex != nil {
+		log.Printf("VTEX catalog proxy enabled (host=%s)", srv.vtex.host)
+	} else {
+		log.Printf("VTEX catalog proxy disabled (VTEX_APP_KEY/TOKEN unset)")
+	}
+
 	// Firebase (Auth + Firestore). Optional in degraded/local mode: when it
 	// cannot be initialized the server still serves recommendations, but /me
 	// and token verification are unavailable. If AUTH_REQUIRED=true the absence
@@ -1227,6 +1245,7 @@ func main() {
 
 	// Identity-aware routes. authMiddleware verifies a Bearer token when present
 	// and, while authRequired=false, lets legacy (X-User-Id / path) requests pass.
+	mux.HandleFunc("/feed", srv.authMiddleware(srv.handleFeed))
 	mux.HandleFunc("/recommend/", srv.authMiddleware(srv.handleRecommend)) // legacy /recommend/{id}
 	mux.HandleFunc("/recommend", srv.authMiddleware(srv.handleRecommend))  // new token flow
 	mux.HandleFunc("/events", srv.authMiddleware(srv.handleEvents))
@@ -1236,11 +1255,23 @@ func main() {
 	// Auth-only.
 	mux.HandleFunc("/me", srv.authMiddleware(srv.handleMe))
 	mux.HandleFunc("/me/client-id", srv.authMiddleware(srv.handleSetClientID))
+	mux.HandleFunc("/me/likes", srv.authMiddleware(srv.handleMeLikes))
+	mux.HandleFunc("/me/likes/", srv.authMiddleware(srv.handleMeLikes))
+	mux.HandleFunc("/me/bookmarks", srv.authMiddleware(srv.handleMeBookmarks))
+	mux.HandleFunc("/me/bookmarks/", srv.authMiddleware(srv.handleMeBookmarks))
+	mux.HandleFunc("/products/", srv.authMiddleware(srv.handleProductComments))
 
 	// UGC posts (auth-only). /posts: POST creates + GET lists own; the subpath
 	// handles POST /posts/{id}/complete.
 	mux.HandleFunc("/posts", srv.authMiddleware(srv.handlePosts))
 	mux.HandleFunc("/posts/", srv.authMiddleware(srv.handlePostsSub))
+
+	// VTEX catalog proxy (auth-only). Keys stay on the BFF; the app uses Bearer.
+	mux.HandleFunc("/catalog/sku/", srv.authMiddleware(srv.handleCatalogSKU))
+	mux.HandleFunc("/catalog/search", srv.authMiddleware(srv.handleCatalogSearch))
+
+	// Public user profiles (auth-only).
+	mux.HandleFunc("/users/", srv.authMiddleware(srv.handleUsersSub))
 
 	log.Printf("Server listening on :%s", port)
 	log.Fatal(http.ListenAndServe(":"+port, mux))

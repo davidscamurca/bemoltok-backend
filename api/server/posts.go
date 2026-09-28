@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"cloud.google.com/go/firestore"
 	"cloud.google.com/go/storage"
@@ -46,6 +47,9 @@ const (
 
 	maxPhotoBytes = 10 << 20  // 10 MiB per photo
 	maxVideoBytes = 100 << 20 // 100 MiB for the video
+
+	// maxCaptionRunes is the public caption limit (UTF-8 runes, not bytes).
+	maxCaptionRunes = 500
 
 	// maxVideoSeconds is the gallery video limit. It is enforced by the app
 	// (the backend cannot cheaply probe duration); kept here for documentation.
@@ -152,10 +156,19 @@ type PostDoc struct {
 	UID         string      `firestore:"uid"                    json:"-"`
 	ProductID   string      `firestore:"product_id"             json:"product_id"`
 	Type        string      `firestore:"type"                   json:"type"`
+	Caption     string      `firestore:"caption,omitempty"      json:"caption,omitempty"`
 	Media       []PostMedia `firestore:"media"                  json:"media"`
 	Status      string      `firestore:"status"                 json:"status"`
 	CreatedAt   time.Time   `firestore:"created_at"             json:"created_at"`
 	PublishedAt *time.Time  `firestore:"published_at,omitempty" json:"published_at,omitempty"`
+	AuthorLabel string      `firestore:"author_label,omitempty" json:"author_label,omitempty"`
+	LikeCount   int         `firestore:"like_count" json:"like_count"`
+
+	// Moderation schema (beta publishes immediately; fields reserved for future use).
+	ReportedCount    int        `firestore:"reported_count,omitempty"    json:"reported_count,omitempty"`
+	ModerationReason string     `firestore:"moderation_reason,omitempty" json:"moderation_reason,omitempty"`
+	ModeratedAt      *time.Time `firestore:"moderated_at,omitempty"       json:"moderated_at,omitempty"`
+	ModeratedBy      string     `firestore:"moderated_by,omitempty"       json:"moderated_by,omitempty"`
 }
 
 // ── Request / response types ──────────────────────────────────────────────────
@@ -167,6 +180,7 @@ type postItemInput struct {
 type createPostRequest struct {
 	ProductID string          `json:"product_id"`
 	Type      string          `json:"type"`
+	Caption   string          `json:"caption"`
 	Items     []postItemInput `json:"items"`
 }
 
@@ -190,6 +204,7 @@ type createPostResponse struct {
 type postView struct {
 	PostDoc
 	MediaURLs []string `json:"media_urls"`
+	LikedByMe bool     `json:"liked_by_me,omitempty"`
 }
 
 // ── Routing ───────────────────────────────────────────────────────────────────
@@ -215,7 +230,12 @@ func (srv *Server) handlePosts(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// handlePostsSub serves POST /posts/{id}/complete.
+// handlePostsSub serves:
+//   GET  /posts/{id}
+//   POST /posts/{id}/complete
+//   PUT|DELETE /posts/{id}/like
+//   GET|POST /posts/{id}/comments
+//   PUT|DELETE /posts/{id}/comments/{commentId}/like
 func (srv *Server) handlePostsSub(w http.ResponseWriter, r *http.Request) {
 	if srv.ugc == nil {
 		writeJSON(w, 503, map[string]string{"error": "posts not configured"})
@@ -228,12 +248,34 @@ func (srv *Server) handlePostsSub(w http.ResponseWriter, r *http.Request) {
 	}
 	rest := strings.Trim(strings.TrimPrefix(r.URL.Path, "/posts/"), "/")
 	parts := strings.Split(rest, "/")
+	if len(parts) == 0 || parts[0] == "" {
+		writeJSON(w, 404, map[string]string{"error": "not found"})
+		return
+	}
+	postID := parts[0]
+
+	if len(parts) >= 4 && parts[1] == "comments" && parts[3] == "like" {
+		srv.handlePostCommentLike(w, r, postID, parts[2], uid)
+		return
+	}
+	if len(parts) >= 2 && parts[1] == "comments" {
+		srv.handlePostComments(w, r, postID, uid)
+		return
+	}
+	if len(parts) == 2 && parts[1] == "like" {
+		srv.handlePostLike(w, r, postID, uid)
+		return
+	}
 	if len(parts) == 2 && parts[1] == "complete" {
 		if r.Method != http.MethodPost {
 			writeJSON(w, 405, map[string]string{"error": "method not allowed"})
 			return
 		}
-		srv.completePost(w, r, uid, parts[0])
+		srv.completePost(w, r, uid, postID)
+		return
+	}
+	if len(parts) == 1 && r.Method == http.MethodGet {
+		srv.getPost(w, r, uid, postID)
 		return
 	}
 	writeJSON(w, 404, map[string]string{"error": "not found"})
@@ -252,6 +294,14 @@ func (srv *Server) createPost(w http.ResponseWriter, r *http.Request, uid string
 	productID := strings.TrimSpace(req.ProductID)
 	if productID == "" {
 		writeJSON(w, 400, map[string]string{"error": "product_id is required"})
+		return
+	}
+
+	caption := strings.TrimSpace(req.Caption)
+	if utf8.RuneCountInString(caption) > maxCaptionRunes {
+		writeJSON(w, 400, map[string]string{
+			"error": fmt.Sprintf("caption must be at most %d characters", maxCaptionRunes),
+		})
 		return
 	}
 
@@ -310,6 +360,7 @@ func (srv *Server) createPost(w http.ResponseWriter, r *http.Request, uid string
 		UID:       uid,
 		ProductID: productID,
 		Type:      req.Type,
+		Caption:   caption,
 		Media:     media,
 		Status:    postStatusAwaiting,
 		CreatedAt: now,
@@ -391,6 +442,9 @@ func (srv *Server) completePost(w http.ResponseWriter, r *http.Request, uid, pos
 	now := time.Now().UTC()
 	doc.Status = postStatusPublished
 	doc.PublishedAt = &now
+	if doc.AuthorLabel == "" {
+		doc.AuthorLabel = authorDisplayLabel(emailFromContext(ctx))
+	}
 	if _, err := ref.Set(ctx, doc); err != nil {
 		log.Printf("posts: publish failed: %v", err)
 		writeJSON(w, 500, map[string]string{"error": "could not publish post"})
@@ -436,4 +490,43 @@ func (srv *Server) listPosts(w http.ResponseWriter, r *http.Request, uid string)
 		views = append(views, postView{PostDoc: p, MediaURLs: urls})
 	}
 	writeJSON(w, 200, map[string]interface{}{"posts": views})
+}
+
+func (srv *Server) getPost(w http.ResponseWriter, r *http.Request, uid, postID string) {
+	ctx := r.Context()
+	ref := srv.ugc.fs.Collection(postsCollection).Doc(postID)
+	snap, err := ref.Get(ctx)
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			writeJSON(w, 404, map[string]string{"error": "post not found"})
+			return
+		}
+		writeJSON(w, 500, map[string]string{"error": "could not read post"})
+		return
+	}
+	var doc PostDoc
+	if err := snap.DataTo(&doc); err != nil {
+		writeJSON(w, 500, map[string]string{"error": "could not read post"})
+		return
+	}
+	if doc.Status != postStatusPublished {
+		writeJSON(w, 404, map[string]string{"error": "post not found"})
+		return
+	}
+	urls := make([]string, 0, len(doc.Media))
+	for _, m := range doc.Media {
+		if url, err := srv.ugc.signedGetURL(m.Object); err == nil {
+			urls = append(urls, url)
+		}
+	}
+	likedByMe := false
+	if uid != "" {
+		_, err := ref.Collection(postLikesSubcollection).Doc(uid).Get(ctx)
+		likedByMe = err == nil
+	}
+	view := postView{PostDoc: doc, MediaURLs: urls}
+	writeJSON(w, 200, map[string]interface{}{
+		"post":        view,
+		"liked_by_me": likedByMe,
+	})
 }
