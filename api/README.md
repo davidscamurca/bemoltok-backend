@@ -399,11 +399,13 @@ docker run --rm -v "$PWD":/app -w /app \
 ## Deploy (Cloud Run)
 
 ```bash
-cd /home/david.camurca@bemol.local/Developer/bmltok/api
+cd api
 gcloud run deploy bemoltok-bff \
   --source . \
   --region southamerica-east1 \
-  --update-env-vars AUTH_REQUIRED=true,ALLOWED_EMAIL_DOMAIN=bemol.com.br,GOOGLE_CLOUD_PROJECT=bemoltok-dev
+  --project bemoltok-dev \
+  --update-env-vars AUTH_REQUIRED=true,ALLOWED_EMAIL_DOMAIN=bemol.com.br,GOOGLE_CLOUD_PROJECT=bemoltok-dev \
+  --update-secrets=VTEX_APP_KEY=vtex-app-key:latest,VTEX_APP_TOKEN=vtex-app-token:latest
 ```
 O build é remoto (Cloud Build), então compila ARM→amd64 sem dor. Memória/CPU e o
 volume do GCS são preservados entre deploys.
@@ -442,13 +444,18 @@ volume do GCS são preservados entre deploys.
 | **UGC (posts foto/vídeo)** | | |
 | `UGC_BUCKET` | `bemoltok-dev-ugc` | bucket GCS privado da mídia |
 | `UGC_SIGNER_SA` | — | email da SA de runtime, usada como `GoogleAccessID` p/ assinar V4 (IAM `signBlob`). Vazio → `/posts` **desabilitado** |
+| **VTEX catalog proxy** | | |
+| `VTEX_APP_KEY` | Secret Manager (`vtex-app-key`) | header `X-VTEX-API-AppKey`. Ausente → `/catalog/*` **503** |
+| `VTEX_APP_TOKEN` | Secret Manager (`vtex-app-token`) | header `X-VTEX-API-AppToken`. Ausente → `/catalog/*` **503** |
+| `VTEX_HOST` | `bemol.vtexcommercestable.com.br` | host VTEX upstream (opcional) |
 
 > Eventos, contadores (UCB1), trends, perfis e experiments vivem todos no **Firestore**.
 > Não há mais Postgres.
 >
 > **Segredos** (`ADMIN_TOKEN`, `DIRECTORY_HMAC_SECRET`, `SENDGRID_API_KEY`,
-> `SEND_LINK_APP_KEY`) ficam no **Google Secret Manager** e são montados como env no
-> Cloud Run via `--set-secrets` (os arquivos `.secret` locais servem de backup/rotação,
+> `SEND_LINK_APP_KEY`, `VTEX_APP_KEY`, `VTEX_APP_TOKEN`) ficam no **Google Secret Manager**
+> e são montados como env no Cloud Run via `--update-secrets` (os arquivos `.secret` locais
+> servem de backup/rotação,
 > fora do repo). A SA de runtime tem `roles/iam.serviceAccountTokenCreator` (para
 > `signBlob` das signed URLs e dos custom tokens) e `roles/storage.objectAdmin` no bucket UGC.
 

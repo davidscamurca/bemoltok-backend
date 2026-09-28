@@ -188,6 +188,10 @@ type Server struct {
 	// nil when VTEX_APP_KEY / VTEX_APP_TOKEN are unset (catalog routes → 503).
 	vtex *vtexCatalog
 
+	// commentStoreOverride allows in-memory comment persistence in tests.
+	// nil means use Firestore via srv.fb.
+	commentStoreOverride commentStore
+
 	// uid → bemolClientId cache to avoid a Firestore read per /recommend.
 	clientIDMu    sync.RWMutex
 	clientIDCache map[string]string
@@ -1241,6 +1245,7 @@ func main() {
 
 	// Identity-aware routes. authMiddleware verifies a Bearer token when present
 	// and, while authRequired=false, lets legacy (X-User-Id / path) requests pass.
+	mux.HandleFunc("/feed", srv.authMiddleware(srv.handleFeed))
 	mux.HandleFunc("/recommend/", srv.authMiddleware(srv.handleRecommend)) // legacy /recommend/{id}
 	mux.HandleFunc("/recommend", srv.authMiddleware(srv.handleRecommend))  // new token flow
 	mux.HandleFunc("/events", srv.authMiddleware(srv.handleEvents))
@@ -1264,6 +1269,9 @@ func main() {
 	// VTEX catalog proxy (auth-only). Keys stay on the BFF; the app uses Bearer.
 	mux.HandleFunc("/catalog/sku/", srv.authMiddleware(srv.handleCatalogSKU))
 	mux.HandleFunc("/catalog/search", srv.authMiddleware(srv.handleCatalogSearch))
+
+	// Public user profiles (auth-only).
+	mux.HandleFunc("/users/", srv.authMiddleware(srv.handleUsersSub))
 
 	log.Printf("Server listening on :%s", port)
 	log.Fatal(http.ListenAndServe(":"+port, mux))
